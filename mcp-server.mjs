@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Strapi 5 MCP Server (Zero-Dependency Version)
+ * Strapi 5 MCP Server (Zero-Dependency Version) - UPGRADED
  * 
  * Provides tools to interact with Strapi 5 APIs, including schema discovery,
- * data querying, and content management.
+ * data querying, and content management (CRUD).
  * 
  * Usage: 
  *   export STRAPI_URL=http://localhost:1337
@@ -18,7 +18,7 @@ import { createInterface } from 'readline';
 
 // --- Constants & Config ---
 const CONFIG = {
-    STRAPI_URL: process.env.STRAPI_URL || 'http://localhost:1337',
+    STRAPI_URL: (process.env.STRAPI_URL || 'http://localhost:1337').replace(/\/$/, ''),
     STRAPI_TOKEN: process.env.STRAPI_TOKEN || '',
     PROJECT_ROOT: process.env.PROJECT_ROOT || (fs.existsSync(path.join(process.cwd(), 'backend')) ? path.join(process.cwd(), 'backend') : process.cwd()),
     LOG_FILE: 'mcp-server.log'
@@ -28,8 +28,41 @@ const CONFIG = {
 function log(msg) {
     const timestamp = new Date().toISOString();
     const line = `[${timestamp}] ${msg}\n`;
-    fs.appendFileSync(path.join(CONFIG.PROJECT_ROOT, CONFIG.LOG_FILE), line);
+    try {
+        fs.appendFileSync(path.join(CONFIG.PROJECT_ROOT, CONFIG.LOG_FILE), line);
+    } catch (e) {
+        // Fallback if log file inaccessible
+    }
     console.error(msg); // STDERR is used for logging in MCP
+}
+
+/**
+ * Strapi 5 uses complex query objects. This helper converts nested objects
+ * into the bracket notation that Strapi expects (e.g., filters[title][$eq]=val)
+ */
+function buildQueryString(params, prefix = '') {
+    const parts = [];
+    for (const key in params) {
+        if (Object.prototype.hasOwnProperty.call(params, key)) {
+            const value = params[key];
+            const newPrefix = prefix ? `${prefix}[${key}]` : key;
+
+            if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                parts.push(buildQueryString(value, newPrefix));
+            } else if (Array.isArray(value)) {
+                value.forEach((val, index) => {
+                    if (typeof val === 'object') {
+                        parts.push(buildQueryString(val, `${newPrefix}[${index}]`));
+                    } else {
+                        parts.push(`${encodeURIComponent(`${newPrefix}[${index}]`)}=${encodeURIComponent(val)}`);
+                    }
+                });
+            } else if (value !== undefined) {
+                parts.push(`${encodeURIComponent(newPrefix)}=${encodeURIComponent(value)}`);
+            }
+        }
+    }
+    return parts.filter(p => p !== '').join('&');
 }
 
 async function strapiRequest(endpoint, method = 'GET', body = null) {
@@ -49,7 +82,14 @@ async function strapiRequest(endpoint, method = 'GET', body = null) {
             body: body ? JSON.stringify(body) : null
         });
 
-        const data = await response.json();
+        const text = await response.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            data = { raw: text };
+        }
+
         if (!response.ok) {
             throw new Error(`Strapi API Error (${response.status}): ${JSON.stringify(data)}`);
         }
@@ -62,9 +102,6 @@ async function strapiRequest(endpoint, method = 'GET', body = null) {
 
 // --- Tool Implementations ---
 
-/**
- * Lists all available Content Types in the Strapi project by scanning src/api
- */
 function listContentTypes() {
     const apiDir = path.join(CONFIG.PROJECT_ROOT, 'src', 'api');
     if (!fs.existsSync(apiDir)) return { error: 'src/api directory not found' };
@@ -75,9 +112,6 @@ function listContentTypes() {
     return { apis };
 }
 
-/**
- * Gets the schema for a specific content type
- */
 function getSchema(apiName) {
     const schemaPath = path.join(CONFIG.PROJECT_ROOT, 'src', 'api', apiName, 'content-types', apiName, 'schema.json');
     if (!fs.existsSync(schemaPath)) return { error: `Schema not found for ${apiName}` };
@@ -86,31 +120,39 @@ function getSchema(apiName) {
     return schema;
 }
 
-/**
- * Find entries with filters and pagination
- */
-async function findEntries(pluralName, queryParams = {}) {
-    const searchParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(queryParams)) {
-        if (typeof value === 'object') {
-            // Handle nested objects (Strapi filters/populate)
-            // Note: This is simplified. Strapi uses complex query formats.
-            searchParams.append(key, JSON.stringify(value));
-        } else {
-            searchParams.append(key, value);
-        }
-    }
+function listComponents() {
+    const compDir = path.join(CONFIG.PROJECT_ROOT, 'src', 'components');
+    if (!fs.existsSync(compDir)) return { components: [] };
 
-    const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    return await strapiRequest(`/api/${pluralName}${queryString}`);
+    const categories = fs.readdirSync(compDir)
+        .filter(name => fs.statSync(path.join(compDir, name)).isDirectory());
+
+    const components = {};
+    for (const cat of categories) {
+        const catPath = path.join(compDir, cat);
+        components[cat] = fs.readdirSync(catPath)
+            .filter(f => f.endsWith('.json'))
+            .map(f => f.replace('.json', ''));
+    }
+    return { components };
 }
 
-// --- JSON-RPC / MCP Protocol ---
+async function findEntries(pluralName, queryParams = {}) {
+    const qs = buildQueryString(queryParams);
+    return await strapiRequest(`/api/${pluralName}${qs ? `?${qs}` : ''}`);
+}
+
+// --- MCP Protocol Config ---
 
 const TOOLS = [
     {
+        name: 'strapi_whoami',
+        description: 'Check connection and authentication status with Strapi.',
+        inputSchema: { type: 'object', properties: {} }
+    },
+    {
         name: 'strapi_list_apis',
-        description: 'List all custom Content Types (APIs) defined in the Strapi project.',
+        description: 'List all custom Content Types (APIs) defined in the Strapi project (scans src/api).',
         inputSchema: { type: 'object', properties: {} }
     },
     {
@@ -138,7 +180,7 @@ const TOOLS = [
                 pluralName: { type: 'string', description: 'The plural name (e.g., "news", "articles")' },
                 queryParams: {
                     type: 'object',
-                    description: 'Query parameters. Use Strapi 5 format (e.g., { "populate": "*", "filters": { "title": { "$contains": "keyword" } } })'
+                    description: 'Query parameters in Strapi format (e.g., { populate: "*", filters: { title: { $contains: "key" } } })'
                 }
             },
             required: ['pluralName']
@@ -152,52 +194,77 @@ const TOOLS = [
             properties: {
                 pluralName: { type: 'string', description: 'The plural name' },
                 id: { type: 'string', description: 'The document ID or entry ID' },
-                populate: { type: 'string', description: 'Population string (e.g., "*", "deep")' }
+                populate: { type: 'string', description: 'Population string (e.g., "*")' }
             },
             required: ['pluralName', 'id']
+        }
+    },
+    {
+        name: 'strapi_create_entry',
+        description: 'Create a new entry in a collection.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                pluralName: { type: 'string', description: 'The plural name' },
+                data: { type: 'object', description: 'The data object to create' }
+            },
+            required: ['pluralName', 'data']
+        }
+    },
+    {
+        name: 'strapi_update_entry',
+        description: 'Update an existing entry by ID.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                pluralName: { type: 'string', description: 'The plural name' },
+                id: { type: 'string', description: 'The entry ID' },
+                data: { type: 'object', description: 'The data object to update' }
+            },
+            required: ['pluralName', 'id', 'data']
+        }
+    },
+    {
+        name: 'strapi_delete_entry',
+        description: 'Delete an entry by ID.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                pluralName: { type: 'string', description: 'The plural name' },
+                id: { type: 'string', description: 'The entry ID' }
+            },
+            required: ['pluralName', 'id']
+        }
+    },
+    {
+        name: 'strapi_list_media',
+        description: 'List files from the Strapi Media Library.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                queryParams: { type: 'object', description: 'Filters/pagination for media' }
+            }
         }
     }
 ];
 
-function listComponents() {
-    const compDir = path.join(CONFIG.PROJECT_ROOT, 'src', 'components');
-    if (!fs.existsSync(compDir)) return { components: [] };
-
-    const categories = fs.readdirSync(compDir)
-        .filter(name => fs.statSync(path.join(compDir, name)).isDirectory());
-
-    const components = {};
-    for (const cat of categories) {
-        const catPath = path.join(compDir, cat);
-        components[cat] = fs.readdirSync(catPath)
-            .filter(f => f.endsWith('.json'))
-            .map(f => f.replace('.json', ''));
-    }
-    return { components };
-}
-
 async function handleRequest(request) {
-    const { method, params, id } = request;
+    const { method, params } = request;
 
-    // 1. Xử lý lệnh bắt tay khởi tạo (CỰC KỲ QUAN TRỌNG)
     if (method === 'initialize') {
         return {
             protocolVersion: "2024-11-05",
             capabilities: {
-                tools: {
-                    listChanged: false
-                }
+                tools: { listChanged: false }
             },
             serverInfo: {
-                name: "strapi-mcp-server",
-                version: "1.0.0"
+                name: "strapi-mcp-server-upgraded",
+                version: "1.1.0"
             }
         };
     }
 
-    if (method === 'notifications/initialized') {
-        return null; // Không cần phản hồi cho thông báo
-    }
+    if (method === 'notifications/initialized') return null;
 
     if (method === 'tools/list') {
         return { tools: TOOLS };
@@ -208,6 +275,9 @@ async function handleRequest(request) {
         try {
             let result;
             switch (name) {
+                case 'strapi_whoami':
+                    result = await strapiRequest('/api/users/me');
+                    break;
                 case 'strapi_list_apis':
                     result = listContentTypes();
                     break;
@@ -223,6 +293,19 @@ async function handleRequest(request) {
                 case 'strapi_get_entry':
                     const qs = args.populate ? `?populate=${args.populate}` : '';
                     result = await strapiRequest(`/api/${args.pluralName}/${args.id}${qs}`);
+                    break;
+                case 'strapi_create_entry':
+                    result = await strapiRequest(`/api/${args.pluralName}`, 'POST', { data: args.data });
+                    break;
+                case 'strapi_update_entry':
+                    result = await strapiRequest(`/api/${args.pluralName}/${args.id}`, 'PUT', { data: args.data });
+                    break;
+                case 'strapi_delete_entry':
+                    result = await strapiRequest(`/api/${args.pluralName}/${args.id}`, 'DELETE');
+                    break;
+                case 'strapi_list_media':
+                    const mqs = buildQueryString(args.queryParams || {});
+                    result = await strapiRequest(`/api/upload/files${mqs ? `?${mqs}` : ''}`);
                     break;
                 default:
                     throw new Error(`Tool not found: ${name}`);
@@ -255,19 +338,19 @@ rl.on('line', async (line) => {
         try {
             const result = await handleRequest(request);
             if (request.id !== undefined) {
-                console.log(JSON.stringify({
+                process.stdout.write(JSON.stringify({
                     jsonrpc: '2.0',
                     id: request.id,
                     result
-                }));
+                }) + '\n');
             }
         } catch (error) {
             if (request.id !== undefined) {
-                console.log(JSON.stringify({
+                process.stdout.write(JSON.stringify({
                     jsonrpc: '2.0',
                     id: request.id,
-                    error: { code: -32601, message: error.message }
-                }));
+                    error: { code: -32603, message: error.message }
+                }) + '\n');
             }
         }
     } catch (e) {
@@ -275,4 +358,4 @@ rl.on('line', async (line) => {
     }
 });
 
-log('Strapi 5 MCP Server started');
+log('Upgraded Strapi 5 MCP Server started');
