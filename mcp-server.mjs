@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Strapi 5 MCP Server (Ultra Edition)
- * Optimized for Landing Page & Multi-page CMS projects
+ * Strapi 5 MCP Server (God Mode Edition)
+ * Comprehensive toolset for Collection Types, Single Types, Components, and Media.
  */
 
 import fs from 'fs';
@@ -85,19 +85,27 @@ function getSchema(apiName) {
     return JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
 }
 
+function listComponents() {
+    const compDir = path.join(CONFIG.PROJECT_ROOT, 'src', 'components');
+    if (!fs.existsSync(compDir)) return { components: [] };
+    const categories = fs.readdirSync(compDir).filter(name => fs.statSync(path.join(compDir, name)).isDirectory());
+    const components = {};
+    for (const cat of categories) {
+        const catPath = path.join(compDir, cat);
+        components[cat] = fs.readdirSync(catPath).filter(f => f.endsWith('.json')).map(f => f.replace('.json', ''));
+    }
+    return { components };
+}
+
+async function findEntries(pluralName, queryParams = {}) {
+    const qs = buildQueryString(queryParams);
+    return await strapiRequest(`/api/${pluralName}${qs ? `?${qs}` : ''}`);
+}
+
 async function findPageBySlug(pluralName, slug) {
     const query = { filters: { slug: { $eq: slug } }, populate: 'deep' };
     const qs = buildQueryString(query);
     return await strapiRequest(`/api/${pluralName}?${qs}`);
-}
-
-async function getGlobalSettings() {
-    // Thường là các Single Types như 'global' hoặc 'setting'
-    try {
-        return await strapiRequest('/api/global?populate=deep');
-    } catch (e) {
-        return { error: "Global settings not found or endpoint not /api/global" };
-    }
 }
 
 // --- MCP Protocol Config ---
@@ -105,17 +113,17 @@ async function getGlobalSettings() {
 const TOOLS = [
     {
         name: 'strapi_whoami',
-        description: 'Check connection and auth status.',
+        description: 'Check connection and authentication status.',
         inputSchema: { type: 'object', properties: {} }
     },
     {
         name: 'strapi_list_apis',
-        description: 'List all APIs (Content Types). Useful to see available pages/collections.',
+        description: 'List all Content Types (APIs) defined in the project.',
         inputSchema: { type: 'object', properties: {} }
     },
     {
         name: 'strapi_get_schema',
-        description: 'Get schema for a Content Type (field names, types, components).',
+        description: 'Get JSON schema for a content type.',
         inputSchema: {
             type: 'object',
             properties: { apiName: { type: 'string' } },
@@ -123,37 +131,62 @@ const TOOLS = [
         }
     },
     {
-        name: 'strapi_get_page_by_slug',
-        description: 'Fetch a page by its slug (common for landing pages). Autopopulates deep.',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                pluralName: { type: 'string', description: 'e.g. "pages", "landing-pages"' },
-                slug: { type: 'string' }
-            },
-            required: ['pluralName', 'slug']
-        }
-    },
-    {
-        name: 'strapi_get_global',
-        description: 'Fetch global settings (SEO, Header, Footer) from /api/global.',
+        name: 'strapi_list_components',
+        description: 'List all shared components in src/components.',
         inputSchema: { type: 'object', properties: {} }
     },
     {
         name: 'strapi_query',
-        description: 'Advanced query with filters, populate, sort.',
+        description: 'Query collection entries with filters, sorting, and pagination.',
         inputSchema: {
             type: 'object',
             properties: {
-                pluralName: { type: 'string' },
+                pluralName: { type: 'string', description: 'Plural name of collection' },
                 queryParams: { type: 'object' }
             },
             required: ['pluralName']
         }
     },
     {
+        name: 'strapi_get_entry',
+        description: 'Get a specific collection entry by ID.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                pluralName: { type: 'string' },
+                id: { type: 'string' },
+                populate: { type: 'string', default: 'deep' }
+            },
+            required: ['pluralName', 'id']
+        }
+    },
+    {
+        name: 'strapi_get_page_by_slug',
+        description: 'Get a collection entry by slug (common for pages).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                pluralName: { type: 'string' },
+                slug: { type: 'string' }
+            },
+            required: ['pluralName', 'slug']
+        }
+    },
+    {
+        name: 'strapi_get_single',
+        description: 'Get content from a Single Type (e.g., "global", "homepage").',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                singularName: { type: 'string', description: 'Singular name of the single type' },
+                populate: { type: 'string', default: 'deep' }
+            },
+            required: ['singularName']
+        }
+    },
+    {
         name: 'strapi_create_entry',
-        description: 'Create new entry.',
+        description: 'Create a new collection entry.',
         inputSchema: {
             type: 'object',
             properties: { pluralName: { type: 'string' }, data: { type: 'object' } },
@@ -162,16 +195,29 @@ const TOOLS = [
     },
     {
         name: 'strapi_update_entry',
-        description: 'Update entry.',
+        description: 'Update a collection entry or a Single Type.',
         inputSchema: {
             type: 'object',
-            properties: { pluralName: { type: 'string' }, id: { type: 'string' }, data: { type: 'object' } },
-            required: ['pluralName', 'id', 'data']
+            properties: {
+                name: { type: 'string', description: 'Plural identifier for collection, singular for single type' },
+                id: { type: 'string', description: 'Leave empty for Single Types' },
+                data: { type: 'object' }
+            },
+            required: ['name', 'data']
+        }
+    },
+    {
+        name: 'strapi_delete_entry',
+        description: 'Delete a collection entry.',
+        inputSchema: {
+            type: 'object',
+            properties: { pluralName: { type: 'string' }, id: { type: 'string' } },
+            required: ['pluralName', 'id']
         }
     },
     {
         name: 'strapi_list_media',
-        description: 'Browse images/assets in Media Library.',
+        description: 'List media files.',
         inputSchema: {
             type: 'object',
             properties: { queryParams: { type: 'object' } }
@@ -186,7 +232,7 @@ async function handleRequest(request) {
         return {
             protocolVersion: "2024-11-05",
             capabilities: { tools: { listChanged: false } },
-            serverInfo: { name: "strapi-mcp-ultra", version: "1.2.0" }
+            serverInfo: { name: "strapi-mcp-god-mode", version: "1.3.0" }
         };
     }
     if (method === 'notifications/initialized') return null;
@@ -200,11 +246,21 @@ async function handleRequest(request) {
                 case 'strapi_whoami': result = await strapiRequest('/api/users/me'); break;
                 case 'strapi_list_apis': result = listContentTypes(); break;
                 case 'strapi_get_schema': result = getSchema(args.apiName); break;
-                case 'strapi_get_page_by_slug': result = await findPageBySlug(args.pluralName, args.slug); break;
-                case 'strapi_get_global': result = await getGlobalSettings(); break;
+                case 'strapi_list_components': result = listComponents(); break;
                 case 'strapi_query': result = await findEntries(args.pluralName, args.queryParams); break;
+                case 'strapi_get_entry':
+                    result = await strapiRequest(`/api/${args.pluralName}/${args.id}?populate=${args.populate || 'deep'}`);
+                    break;
+                case 'strapi_get_page_by_slug': result = await findPageBySlug(args.pluralName, args.slug); break;
+                case 'strapi_get_single':
+                    result = await strapiRequest(`/api/${args.singularName}?populate=${args.populate || 'deep'}`);
+                    break;
                 case 'strapi_create_entry': result = await strapiRequest(`/api/${args.pluralName}`, 'POST', { data: args.data }); break;
-                case 'strapi_update_entry': result = await strapiRequest(`/api/${args.pluralName}/${args.id}`, 'PUT', { data: args.data }); break;
+                case 'strapi_update_entry':
+                    const endpoint = args.id ? `/api/${args.name}/${args.id}` : `/api/${args.name}`;
+                    result = await strapiRequest(endpoint, 'PUT', { data: args.data });
+                    break;
+                case 'strapi_delete_entry': result = await strapiRequest(`/api/${args.pluralName}/${args.id}`, 'DELETE'); break;
                 case 'strapi_list_media':
                     const mqs = buildQueryString(args.queryParams || {});
                     result = await strapiRequest(`/api/upload/files${mqs ? `?${mqs}` : ''}`);
@@ -217,11 +273,6 @@ async function handleRequest(request) {
         }
     }
     throw new Error(`Method not found: ${method}`);
-}
-
-async function findEntries(pluralName, queryParams = {}) {
-    const qs = buildQueryString(queryParams);
-    return await strapiRequest(`/api/${pluralName}${qs ? `?${qs}` : ''}`);
 }
 
 const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: false });
@@ -238,4 +289,4 @@ rl.on('line', async (line) => {
     } catch (e) { log(`Failed to parse request: ${e.message}`); }
 });
 
-log('Ultra Strapi MCP Server for Landing Pages started');
+log('God Mode Strapi MCP Server started');
