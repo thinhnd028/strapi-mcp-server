@@ -1,0 +1,4 @@
+node_modules
+.env
+mcp-server.log
+.agent

@@ -8,31 +8,25 @@ A zero-dependency Model Context Protocol (MCP) server designed to help AI agents
 - **REST API Integration**: Tools to query entries, handle population, and filters.
 - **Zero Dependencies**: Runs natively with Node.js 18+ using standard `fetch` and `JSON-RPC`.
 
-## Installation
+## Installation & Usage
+
+Bạn có thể chạy trực tiếp từ GitHub bằng lệnh `npx` mà không cần clone code:
 
 ```bash
-git clone <your-repo-url>
-cd strapi-mcp-standalone
+# Cách chạy trực tiếp
+npx github:thinhnd028/strapi-mcp-server
 ```
 
-## Configuration
+## Configuration for Cursor / Claude Desktop
 
-The server uses the following environment variables:
-
-- `PROJECT_ROOT`: Path to your Strapi backend directory (required if not running inside the backend folder).
-- `STRAPI_URL`: Your Strapi server URL (default: `http://localhost:1337`).
-- `STRAPI_TOKEN`: Your Strapi API Token (Full Access or Custom).
-
-## Usage in Cursor / VS Code MCP
-
-Add the following to your MCP settings:
+Để sử dụng ổn định, hãy thêm cấu hình sau vào MCP settings của bạn:
 
 ```json
 {
   "mcpServers": {
     "strapi": {
-      "command": "node",
-      "args": ["/path/to/strapi-mcp-standalone/mcp-server.mjs"],
+      "command": "npx",
+      "args": ["-y", "github:thinhnd028/strapi-mcp-server"],
       "env": {
         "PROJECT_ROOT": "/path/to/your/strapi/backend",
         "STRAPI_URL": "http://localhost:1337",

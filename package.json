@@ -4,6 +4,9 @@
     "description": "A zero-dependency MCP server for Strapi 5",
     "main": "mcp-server.mjs",
     "type": "module",
+    "bin": {
+        "strapi-mcp-server": "./mcp-server.mjs"
+    },
     "scripts": {
         "start": "node mcp-server.mjs"
     },
