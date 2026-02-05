@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Strapi 5 MCP Server (God Mode Edition)
+ * Strapi 5 MCP Server (God Mode Edition - Cloud Migration Ready)
  * Comprehensive toolset for Collection Types, Single Types, Components, and Media.
  */
 
@@ -106,6 +106,55 @@ async function findPageBySlug(pluralName, slug) {
     const query = { filters: { slug: { $eq: slug } }, populate: 'deep' };
     const qs = buildQueryString(query);
     return await strapiRequest(`/api/${pluralName}?${qs}`);
+}
+
+async function replaceMediaUrls(oldBaseUrl, newBaseUrl) {
+    log(`Starting migration: Replacing ${oldBaseUrl} with ${newBaseUrl} in Media Library`);
+    let page = 1;
+    let totalUpdated = 0;
+    const errors = [];
+
+    while (true) {
+        try {
+            const data = await strapiRequest(`/api/upload/files?pagination[page]=${page}&pagination[pageSize]=100`);
+            const files = Array.isArray(data) ? data : (data.data || []);
+
+            if (!files.length) break;
+
+            for (const file of files) {
+                if (file.url && file.url.includes(oldBaseUrl)) {
+                    const newUrl = file.url.replace(oldBaseUrl, newBaseUrl);
+                    log(`Migrating file ${file.id}: ${file.url} -> ${newUrl}`);
+
+                    try {
+                        // In Strapi, updating the URL field specifically might require a custom provider
+                        // but we try to update the metadata through the file info or direct object.
+                        // We use the file update endpoint.
+                        await strapiRequest(`/api/upload/files/${file.id}?action=update`, 'POST', {
+                            fileInfo: {
+                                // Some providers store the URL in a field that can be updated
+                                url: newUrl
+                            },
+                            // Attempt to update the root url field as well
+                            url: newUrl
+                        });
+                        totalUpdated++;
+                    } catch (err) {
+                        log(`Failed to update file ${file.id}: ${err.message}`);
+                        errors.push({ id: file.id, error: err.message });
+                    }
+                }
+            }
+
+            if (files.length < 100) break;
+            page++;
+        } catch (e) {
+            log(`Pagination error at page ${page}: ${e.message}`);
+            break;
+        }
+    }
+
+    return { totalUpdated, totalErrors: errors.length, errors };
 }
 
 // --- MCP Protocol Config ---
@@ -222,6 +271,18 @@ const TOOLS = [
             type: 'object',
             properties: { queryParams: { type: 'object' } }
         }
+    },
+    {
+        name: 'strapi_replace_media_urls',
+        description: 'Global search and replace for media URLs (ideal for cloud storage migration).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                oldBaseUrl: { type: 'string', description: 'Old URL prefix/domain to find' },
+                newBaseUrl: { type: 'string', description: 'New URL prefix/domain to replace with' }
+            },
+            required: ['oldBaseUrl', 'newBaseUrl']
+        }
     }
 ];
 
@@ -232,7 +293,7 @@ async function handleRequest(request) {
         return {
             protocolVersion: "2024-11-05",
             capabilities: { tools: { listChanged: false } },
-            serverInfo: { name: "strapi-mcp-god-mode", version: "1.3.0" }
+            serverInfo: { name: "strapi-mcp-god-mode", version: "1.4.0" }
         };
     }
     if (method === 'notifications/initialized') return null;
@@ -264,6 +325,9 @@ async function handleRequest(request) {
                 case 'strapi_list_media':
                     const mqs = buildQueryString(args.queryParams || {});
                     result = await strapiRequest(`/api/upload/files${mqs ? `?${mqs}` : ''}`);
+                    break;
+                case 'strapi_replace_media_urls':
+                    result = await replaceMediaUrls(args.oldBaseUrl, args.newBaseUrl);
                     break;
                 default: throw new Error(`Tool not found: ${name}`);
             }
