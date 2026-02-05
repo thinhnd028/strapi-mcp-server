@@ -1,25 +1,47 @@
-# Strapi 5 MCP Server
+# 🚀 Strapi 5 MCP Server (God Mode)
 
-A zero-dependency Model Context Protocol (MCP) server designed to help AI agents work efficiently with **Strapi 5** projects.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Strapi Version](https://img.shields.io/badge/Strapi-v5-blueviolet.svg)](https://strapi.io/)
+[![MCP Protocol](https://img.shields.io/badge/MCP-Protocol-blue.svg)](https://modelcontextprotocol.io/)
 
-## Features
+A zero-dependency **Model Context Protocol (MCP)** server tailored for **Strapi 5**. This server empowers AI agents (like Cursor, Claude Desktop, or custom LLM apps) with "God Mode" access to your Strapi CMS—enabling them to understand your schema, query content with deep population, manage media, and even explore plugin architectures.
 
-- **Schema Discovery**: Directly reads `src/api/*/content-types/*/schema.json` to provide AI with full context of your data structures.
-- **REST API Integration**: Tools to query entries, handle population, and filters.
-- **Zero Dependencies**: Runs natively with Node.js 18+ using standard `fetch` and `JSON-RPC`.
+---
 
-## Installation & Usage
+## ✨ Features
 
-Bạn có thể chạy trực tiếp từ GitHub bằng lệnh `npx` mà không cần clone code:
+- 🔍 **Deep Schema Discovery**: Directly reads your local `src/api/*/content-types/*/schema.json` to give AI full context of your data structures.
+- 🛠️ **Full CRUD Operations**: Create, Read, Update, and Delete entries across Collection and Single Types.
+- 🌊 **Deep Population**: Built-in support for `populate=deep` and complex API queries.
+- 🖼️ **Media Intelligence**: List media files and even globally replace media URLs (perfect for migrations or staging syncs).
+- 🧩 **Developer Toolbox**: Explore custom plugins and discover available components in the Strapi Design System.
+- ⚡ **Zero Dependencies**: Lightweight and fast. Runs natively with Node.js 18+ using standard `fetch`.
+
+---
+
+## 🚀 Quick Start
+
+You can run the server directly from GitHub without cloning the code:
 
 ```bash
-# Cách chạy trực tiếp
-npx github:thinhnd028/strapi-mcp-server
+npx -y github:thinhnd028/strapi-mcp-server
 ```
 
-## Configuration for Cursor / Claude Desktop
+---
 
-Để sử dụng ổn định, hãy thêm cấu hình sau vào MCP settings của bạn:
+## ⚙️ Configuration
+
+The server requires the following environment variables to function correctly:
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `PROJECT_ROOT` | Path to your Strapi backend folder (where `src/` lives). | Current working directory |
+| `STRAPI_URL` | The base URL of your Strapi instance. | `http://localhost:1337` |
+| `STRAPI_TOKEN` | A Full Access API Token (needed for CRUD ops). | (Optional if API is public) |
+
+### Integration with Cursor / Claude Desktop
+
+Add this to your MCP settings (`claude_desktop_config.json` or Cursor MCP settings):
 
 ```json
 {
@@ -28,19 +50,46 @@ npx github:thinhnd028/strapi-mcp-server
       "command": "npx",
       "args": ["-y", "github:thinhnd028/strapi-mcp-server"],
       "env": {
-        "PROJECT_ROOT": "/path/to/your/strapi/backend",
+        "PROJECT_ROOT": "/Users/yourname/projects/my-strapi-app",
         "STRAPI_URL": "http://localhost:1337",
-        "STRAPI_TOKEN": "your_token"
+        "STRAPI_TOKEN": "your_long_api_token_here"
       }
     }
   }
 }
 ```
 
-## Tools Available
+---
 
-- `strapi_list_apis`: List all Content Types.
-- `strapi_get_schema`: Read internal schema definitions.
-- `strapi_list_components`: List shared components.
-- `strapi_query`: Query entries via REST API.
-- `strapi_get_entry`: Get a specific entry by ID.
+## 🧰 Available Tools
+
+### 📦 Content Management
+- `strapi_list_apis`: List all available Content Types.
+- `strapi_get_schema`: Retrieve the internal JSON schema for a specific API.
+- `strapi_list_components`: List shared components available in the project.
+- `strapi_query`: Perform complex queries with filters and pagination.
+- `strapi_get_entry`: Fetch a specific entry by ID (with deep auto-population).
+- `strapi_get_page_by_slug`: Find entries by slug (ideal for frontend developers).
+- `strapi_get_single`: Fetch content from Single Types.
+- `strapi_create_entry`: Create a new entry.
+- `strapi_update_entry`: Update an existing entry.
+- `strapi_delete_entry`: Delete an entry.
+
+### 🖼️ Media & Assets
+- `strapi_list_media`: List and filter media library assets.
+- `strapi_replace_media_urls`: Bulk replace media URLs (useful for staging -> production sync).
+
+### 🛠️ Developer Essentials
+- `strapi_list_plugins`: Discover custom plugins in `src/plugins`.
+- `strapi_get_plugin_structure`: Map out the file structure of a specific plugin.
+- `strapi_get_design_system_info`: List available modules in `@strapi/design-system`.
+
+---
+
+## 📜 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+---
+
+Developed with ❤️ for the Strapi Community.
