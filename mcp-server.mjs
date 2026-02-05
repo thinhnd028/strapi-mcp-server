@@ -179,13 +179,30 @@ function listComponents() {
 async function handleRequest(request) {
     const { method, params, id } = request;
 
+    // 1. Xử lý lệnh bắt tay khởi tạo (CỰC KỲ QUAN TRỌNG)
+    if (method === 'initialize') {
+        return {
+            protocolVersion: "2024-11-05",
+            capabilities: {
+                tools: {}
+            },
+            serverInfo: {
+                name: "strapi-mcp-server",
+                version: "1.0.0"
+            }
+        };
+    }
+
+    if (method === 'notifications/initialized') {
+        return null; // Không cần phản hồi cho thông báo
+    }
+
     if (method === 'listTools') {
         return { tools: TOOLS };
     }
 
     if (method === 'callTool') {
         const { name, arguments: args } = params;
-
         try {
             let result;
             switch (name) {
@@ -206,9 +223,8 @@ async function handleRequest(request) {
                     result = await strapiRequest(`/api/${args.pluralName}/${args.id}${qs}`);
                     break;
                 default:
-                    return { error: { code: -32601, message: 'Tool not found' } };
+                    throw new Error(`Tool not found: ${name}`);
             }
-
             return {
                 content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
             };
@@ -220,7 +236,7 @@ async function handleRequest(request) {
         }
     }
 
-    return { error: { code: -32601, message: 'Method not found' } };
+    throw new Error(`Method not found: ${method}`);
 }
 
 // --- Main Loop ---
@@ -234,12 +250,24 @@ rl.on('line', async (line) => {
     if (!line.trim()) return;
     try {
         const request = JSON.parse(line);
-        const response = await handleRequest(request);
-        console.log(JSON.stringify({
-            jsonrpc: '2.0',
-            id: request.id,
-            result: response
-        }));
+        try {
+            const result = await handleRequest(request);
+            if (request.id !== undefined) {
+                console.log(JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: request.id,
+                    result
+                }));
+            }
+        } catch (error) {
+            if (request.id !== undefined) {
+                console.log(JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: request.id,
+                    error: { code: -32601, message: error.message }
+                }));
+            }
+        }
     } catch (e) {
         log(`Failed to parse request: ${e.message}`);
     }
