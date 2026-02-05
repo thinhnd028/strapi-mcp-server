@@ -1,0 +1,19 @@
+{
+    "name": "strapi-mcp-server",
+    "version": "1.0.0",
+    "description": "A zero-dependency MCP server for Strapi 5",
+    "main": "mcp-server.mjs",
+    "type": "module",
+    "scripts": {
+        "start": "node mcp-server.mjs"
+    },
+    "keywords": [
+        "mcp",
+        "strapi",
+        "strapi5",
+        "llm",
+        "context"
+    ],
+    "author": "",
+    "license": "MIT"
+}
