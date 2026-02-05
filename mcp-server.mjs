@@ -184,7 +184,9 @@ async function handleRequest(request) {
         return {
             protocolVersion: "2024-11-05",
             capabilities: {
-                tools: {}
+                tools: {
+                    listChanged: false
+                }
             },
             serverInfo: {
                 name: "strapi-mcp-server",
@@ -197,11 +199,11 @@ async function handleRequest(request) {
         return null; // Không cần phản hồi cho thông báo
     }
 
-    if (method === 'listTools') {
+    if (method === 'tools/list') {
         return { tools: TOOLS };
     }
 
-    if (method === 'callTool') {
+    if (method === 'tools/call') {
         const { name, arguments: args } = params;
         try {
             let result;
